@@ -1,0 +1,80 @@
+# yii3-mcp-telemetry-bridge
+
+Observability for rasuvaeff/yii3-mcp servers: one trace span + RED-style
+metrics per MCP `tools/call`, via rasuvaeff/yii3-telemetry (tracing core)
+and rasuvaeff/yii3-metrics (metrics core).
+
+## Install
+
+```bash
+composer require rasuvaeff/yii3-mcp-telemetry-bridge
+```
+
+## Rules
+
+- Two interceptors, independent: use `TracingToolCallInterceptor` and/or
+  `MetricsToolCallInterceptor`; each implements yii3-mcp's
+  `ToolCallInterceptorInterface`.
+- Tool exceptions are ALWAYS rethrown unchanged — the bridge never alters
+  the MCP error envelope. On failure the span gets the recorded exception +
+  `Error` status; the counter gets `outcome="error"`.
+- Arguments reach the span masked by yii3-mcp's `ArgumentMasker`
+  (case-insensitive key match at every nesting level; default keys:
+  password, secret, token, api_key, credit_card).
+- Metric names are Prometheus-strict; the duration histogram has no
+  `outcome` label (cardinality) — errors are counted by the counter.
+- Put `TracingToolCallInterceptor` first (outermost) in the interceptor
+  list so the span covers the whole chain.
+- `sessionBudget` ctor param only feeds the `mcp.session.budget_remaining`
+  span attribute; enforcement stays in yii3-mcp's `SessionBudgetInterceptor`.
+
+## API
+
+### TracingToolCallInterceptor
+
+```php
+use Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor;
+use Rasuvaeff\Yii3Mcp\Interceptor\ArgumentMasker;
+
+new TracingToolCallInterceptor(
+    tracer: $tracer,                       // Rasuvaeff\Yii3Telemetry\TracerInterface
+    argumentMasker: new ArgumentMasker(),  // optional
+    sessionBudget: 50,                     // optional, >= 1; throws InvalidArgumentException otherwise
+);
+```
+
+Span: name `mcp.tool <tool>`; attributes `mcp.tool`, `mcp.tool.arguments`
+(masked), `mcp.outcome` (`success`/`error`), `mcp.client.id` (when the
+transport carries one), `mcp.client.name`/`mcp.client.version` (initialize
+handshake), `mcp.session.id`, `mcp.session.calls_used`,
+`mcp.session.budget_remaining` (only with `sessionBudget`).
+
+### MetricsToolCallInterceptor
+
+```php
+use Rasuvaeff\Yii3McpTelemetryBridge\MetricsToolCallInterceptor;
+use Rasuvaeff\Yii3Metrics\MetricRegistry;
+
+new MetricsToolCallInterceptor(
+    metrics: $registry,                    // Rasuvaeff\Yii3Metrics\MetricRegistry
+    durationBuckets: [0.05, 0.1, 0.5],     // optional list<float>, seconds
+);
+```
+
+Metrics: `mcp_tool_calls_total{tool,outcome}` (counter),
+`mcp_tool_call_duration_seconds{tool}` (histogram, hrtime wall time of the
+wrapped chain, observed on success and failure).
+
+### Wiring (Yii3 params)
+
+```php
+'rasuvaeff/yii3-mcp' => [
+    'interceptors' => [
+        Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor::class,
+        Rasuvaeff\Yii3McpTelemetryBridge\MetricsToolCallInterceptor::class,
+    ],
+],
+```
+
+stdio (`mcp:serve`) is long-running: configure the tracing backend to export
+per call (batch processor with scheduled delay, or simple processor).
