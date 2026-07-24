@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
+use Mcp\Exception\ToolCallException;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\MetricsToolCallInterceptor;
 use Rasuvaeff\Yii3McpTelemetryBridge\Tests\Support\DeclaringMeterProvider;
@@ -64,6 +65,27 @@ final class MetricsToolCallInterceptorTest
         $counter = $this->snapshot('mcp_tool_calls_total');
 
         Assert::same($counter->samples[0]->labels->labels, ['outcome' => 'error', 'tool' => 'order.status']);
+        Assert::same($counter->samples[0]->value, 1.0);
+    }
+
+    public function clientVisibleRejectionCountsWithRejectedOutcome(): void
+    {
+        $rejection = new ToolCallException('rate limit exceeded');
+
+        try {
+            $this->interceptor->intercept(
+                new ToolCallContext(toolName: 'order.status', arguments: []),
+                static fn(): string => throw $rejection,
+            );
+
+            Assert::true(false);
+        } catch (ToolCallException $caught) {
+            Assert::same($caught, $rejection);
+        }
+
+        $counter = $this->snapshot('mcp_tool_calls_total');
+
+        Assert::same($counter->samples[0]->labels->labels, ['outcome' => 'rejected', 'tool' => 'order.status']);
         Assert::same($counter->samples[0]->value, 1.0);
     }
 
