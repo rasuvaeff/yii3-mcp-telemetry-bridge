@@ -59,10 +59,10 @@ works, no path repos needed.
   `http.request.param.<name>` in yii3-telemetry-otel.
 - **Telemetry blind spots are documented, not bugs**: budget rejections
   happen outside this bridge (core auto-adds SessionBudgetInterceptor
-  outermost — no span, no metric), and interceptor rejections
-  (ToolCallException) count as `outcome=error` until the core grows a
-  unified outcome model. Keep the README "What the telemetry does NOT
-  see" section in sync.
+  outermost — no span, no metric). Outcomes follow yii3-mcp's `CallOutcome`
+  (`success`/`rejected`/`error`): ToolCallException => `rejected`; never
+  reclassify locally — the audit bridge uses the same vocabulary. Keep the
+  README "What the telemetry does NOT see" section in sync.
 - The duration histogram deliberately has NO `outcome` label (cardinality);
   errors are distinguished by the counter. Document, don't "fix".
 - `TracingToolCallInterceptor::BUDGET_COUNTER_KEY` mirrors the PRIVATE

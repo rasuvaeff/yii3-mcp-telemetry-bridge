@@ -22,7 +22,7 @@ Observability for MCP servers: a trace span and RED-style metrics for every
 | Requirement | Version |
 |-------------|---------|
 | PHP | 8.3 – 8.5 |
-| `rasuvaeff/yii3-mcp` | `^1.4` |
+| `rasuvaeff/yii3-mcp` | `^1.6` |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
 | `rasuvaeff/yii3-metrics` | `^1.0` |
 
@@ -65,7 +65,7 @@ configurator-registered handlers — becomes one span:
 | name | `mcp.tool <tool name>` (e.g. `mcp.tool order.status`) |
 | `mcp.tool` | tool name |
 | `mcp.tool.argument.<name>` | one scalar attribute per argument: masked (`***`), stringified (arrays as JSON), truncated at 200 bytes |
-| `mcp.outcome` | `success` / `error` |
+| `mcp.outcome` | `success` / `rejected` / `error` (yii3-mcp's shared `CallOutcome`) |
 | `mcp.client.id` | identity from the endpoint secret (multi-secret setups); absent on stdio |
 | `mcp.client.name` / `mcp.client.version` | client from the initialize handshake |
 | `mcp.session.id` | MCP session UUID |
@@ -109,7 +109,7 @@ return [
 
 | Metric | Type | Labels |
 |---|---|---|
-| `mcp_tool_calls_total` | counter | `tool`, `outcome` (`success`/`error`) |
+| `mcp_tool_calls_total` | counter | `tool`, `outcome` (`success`/`rejected`/`error`) |
 | `mcp_tool_call_duration_seconds` | histogram | `tool` |
 
 Duration is the wall time of the wrapped chain (`hrtime()`), observed on both
@@ -145,11 +145,12 @@ RBAC, audit) and other interceptors' failures land on the span:
   A call rejected by the session budget produces no span and no metric, so
   an exhausted budget looks like traffic dropping to zero. Watch the
   `mcp.session.budget_remaining` attribute on the calls that do go through.
-- **Rejections count as errors.** A `ToolCallException` thrown by an inner
-  interceptor (RBAC denial, rate limit) is indistinguishable from a tool
-  failure: span status `Error`, counter `outcome="error"`. Alert thresholds
-  on error rate should account for expected rejections; a separate
-  `rejected` outcome awaits a unified outcome model in the yii3-mcp core.
+- **Rejections are `rejected`, not `error`.** A `ToolCallException` thrown
+  by an inner interceptor (RBAC denial, rate limit, session budget) or the
+  tool itself is classified via yii3-mcp's `CallOutcome`: counter
+  `outcome="rejected"`, span attribute `mcp.outcome=rejected` (the span
+  status still becomes `Error` with the recorded exception — the tracing
+  contract is unchanged). Alert on `outcome="error"` for crashes only.
 
 ### stdio mode (`mcp:serve`)
 

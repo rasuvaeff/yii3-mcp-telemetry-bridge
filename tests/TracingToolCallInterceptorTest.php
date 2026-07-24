@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
 use InvalidArgumentException;
+use Mcp\Exception\ToolCallException;
 use Rasuvaeff\Yii3Mcp\Interceptor\ArgumentMasker;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\Tests\Support\FakeSession;
@@ -166,6 +167,28 @@ final class TracingToolCallInterceptorTest
         Assert::same($span->statusCode, SpanStatusCode::Error);
         Assert::same($span->recordedException, $boom);
         Assert::true($span->ended);
+    }
+
+    public function clientVisibleRejectionMarksOutcomeRejected(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+        $rejection = new ToolCallException('rate limit exceeded');
+
+        try {
+            $interceptor->intercept(
+                new ToolCallContext(toolName: 'order.status', arguments: []),
+                static fn(): string => throw $rejection,
+            );
+
+            Assert::true(false);
+        } catch (ToolCallException $caught) {
+            Assert::same($caught, $rejection);
+        }
+
+        $span = $this->tracer->spans[0];
+
+        Assert::same($span->attributes['mcp.outcome'], 'rejected');
+        Assert::same($span->recordedException, $rejection);
     }
 
     public function clientIdentityAttributesComeFromContextAndHandshake(): void

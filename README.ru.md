@@ -22,7 +22,7 @@
 | Требование | Версия |
 |-------------|---------|
 | PHP | 8.3 – 8.5 |
-| `rasuvaeff/yii3-mcp` | `^1.4` |
+| `rasuvaeff/yii3-mcp` | `^1.6` |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
 | `rasuvaeff/yii3-metrics` | `^1.0` |
 
@@ -66,7 +66,7 @@ configurator-регистрации — становится одним span'о�
 | name | `mcp.tool <имя tool>` (например `mcp.tool order.status`) |
 | `mcp.tool` | имя tool |
 | `mcp.tool.argument.<name>` | по скалярному атрибуту на аргумент: маскирование (`***`), stringify (массивы — JSON), усечение до 200 байт |
-| `mcp.outcome` | `success` / `error` |
+| `mcp.outcome` | `success` / `rejected` / `error` (единый `CallOutcome` из yii3-mcp) |
 | `mcp.client.id` | identity из endpoint-секрета (при нескольких секретах); отсутствует в stdio |
 | `mcp.client.name` / `mcp.client.version` | клиент из initialize handshake |
 | `mcp.session.id` | UUID MCP-сессии |
@@ -110,7 +110,7 @@ return [
 
 | Метрика | Тип | Лейблы |
 |---|---|---|
-| `mcp_tool_calls_total` | counter | `tool`, `outcome` (`success`/`error`) |
+| `mcp_tool_calls_total` | counter | `tool`, `outcome` (`success`/`rejected`/`error`) |
 | `mcp_tool_call_duration_seconds` | histogram | `tool` |
 
 Длительность — wall time всей обёрнутой цепочки (`hrtime()`), наблюдается и
@@ -146,11 +146,12 @@ RBAC, audit) и сбои остальных интерцепторов попа�
   из вашего списка. Вызов, отбитый session budget, не создаёт ни span,
   ни метрику: исчерпанный бюджет выглядит как падение трафика в ноль.
   Следите за атрибутом `mcp.session.budget_remaining` на проходящих вызовах.
-- **Отказы считаются ошибками.** `ToolCallException` из внутреннего
-  интерцептора (RBAC-запрет, rate limit) неотличим от падения tool'а:
-  статус span'а `Error`, counter `outcome="error"`. Пороги алертов на
-  error-rate должны учитывать ожидаемые отказы; отдельный outcome
-  `rejected` появится с единой outcome-моделью в ядре yii3-mcp.
+- **Отказы — это `rejected`, не `error`.** `ToolCallException` из
+  внутреннего интерцептора (RBAC, rate limit, session budget) или самого
+  tool'а классифицируется через `CallOutcome` ядра: counter
+  `outcome="rejected"`, атрибут span'а `mcp.outcome=rejected` (статус
+  span'а по-прежнему `Error` с записанным исключением — контракт трейсинга
+  не менялся). Алертитесь на `outcome="error"` — это только падения.
 
 ### stdio-режим (`mcp:serve`)
 

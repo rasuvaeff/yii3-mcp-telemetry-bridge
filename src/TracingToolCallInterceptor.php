@@ -6,6 +6,7 @@ namespace Rasuvaeff\Yii3McpTelemetryBridge;
 
 use InvalidArgumentException;
 use Rasuvaeff\Yii3Mcp\Interceptor\ArgumentMasker;
+use Rasuvaeff\Yii3Mcp\Interceptor\CallOutcome;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallInterceptorInterface;
 use Rasuvaeff\Yii3Telemetry\SpanInterface;
@@ -28,11 +29,10 @@ use Throwable;
  * The span follows the frozen trace() contract of rasuvaeff/yii3-telemetry:
  * a tool exception is recorded on the span, the span status becomes Error
  * and the ORIGINAL exception is rethrown, so the MCP error envelope the
- * agent sees is unchanged. The `mcp.outcome` attribute mirrors the result
- * (`success`/`error`) for backends that filter by attribute rather than by
- * span status. A rejection thrown by an inner interceptor (RBAC, rate
- * limit) also counts as `error` — a unified outcome model is a planned
- * core-level change.
+ * agent sees is unchanged. The `mcp.outcome` attribute follows the core's
+ * shared {@see CallOutcome} vocabulary: `success`, `rejected` (a
+ * client-visible refusal — rate limit, RBAC, budget) or `error` (an
+ * unexpected failure).
  *
  * @api
  */
@@ -75,12 +75,12 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
                     /** @var mixed $result */
                     $result = $next();
                 } catch (Throwable $exception) {
-                    $span->setAttribute('mcp.outcome', 'error');
+                    $span->setAttribute('mcp.outcome', CallOutcome::fromThrowable($exception)->value);
 
                     throw $exception;
                 }
 
-                $span->setAttribute('mcp.outcome', 'success');
+                $span->setAttribute('mcp.outcome', CallOutcome::Success->value);
 
                 return $result;
             },
