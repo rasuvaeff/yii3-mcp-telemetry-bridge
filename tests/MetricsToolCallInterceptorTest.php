@@ -6,6 +6,7 @@ namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\MetricsToolCallInterceptor;
+use Rasuvaeff\Yii3McpTelemetryBridge\Tests\Support\DeclaringMeterProvider;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
 use Rasuvaeff\Yii3Metrics\MetricRegistry;
 use Rasuvaeff\Yii3Metrics\MetricSnapshot;
@@ -34,7 +35,7 @@ final class MetricsToolCallInterceptorTest
     {
         $result = $this->interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: []),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         Assert::same($result, 'paid');
@@ -52,7 +53,7 @@ final class MetricsToolCallInterceptorTest
         try {
             $this->interceptor->intercept(
                 new ToolCallContext(toolName: 'order.status', arguments: []),
-                static fn (): string => throw $boom,
+                static fn(): string => throw $boom,
             );
 
             Assert::true(false);
@@ -70,13 +71,13 @@ final class MetricsToolCallInterceptorTest
     {
         $this->interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: []),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         try {
             $this->interceptor->intercept(
                 new ToolCallContext(toolName: 'order.status', arguments: []),
-                static fn (): string => throw new RuntimeException('boom'),
+                static fn(): string => throw new RuntimeException('boom'),
             );
         } catch (RuntimeException) {
         }
@@ -87,13 +88,25 @@ final class MetricsToolCallInterceptorTest
         Assert::same($sample->labels->labels, ['tool' => 'order.status']);
         Assert::same($sample->value, 2.0);
         Assert::true($sample->sum >= 0.0);
+        Assert::true($sample->sum < 60.0);
+    }
+
+    public function instrumentsDeclareTheirLabelNames(): void
+    {
+        $provider = new DeclaringMeterProvider();
+
+        new MetricsToolCallInterceptor(new MetricRegistry($provider), durationBuckets: [1.0, 5.0]);
+
+        Assert::same($provider->declarations['mcp_tool_calls_total']['labelNames'], ['tool', 'outcome']);
+        Assert::same($provider->declarations['mcp_tool_call_duration_seconds']['labelNames'], ['tool']);
+        Assert::same($provider->declarations['mcp_tool_call_duration_seconds']['buckets'], [1.0, 5.0]);
     }
 
     public function repeatedCallsAccumulateIntoTheSameCounter(): void
     {
-        $call = fn (): mixed => $this->interceptor->intercept(
+        $call = fn(): mixed => $this->interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: []),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
         $call();
         $call();
@@ -113,12 +126,12 @@ final class MetricsToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: []),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         $histogram = $this->snapshotOf($provider, 'mcp_tool_call_duration_seconds');
 
-        Assert::same(array_keys($histogram->samples[0]->buckets), ['1', '5', '+Inf']);
+        Assert::same(array_keys($histogram->samples[0]->buckets), [1, 5, '+Inf']);
     }
 
     public function toolsAreDistinguishedByLabel(): void
@@ -126,13 +139,13 @@ final class MetricsToolCallInterceptorTest
         foreach (['order.status', 'order.cancel'] as $tool) {
             $this->interceptor->intercept(
                 new ToolCallContext(toolName: $tool, arguments: []),
-                static fn (): string => 'ok',
+                static fn(): string => 'ok',
             );
         }
 
         $counter = $this->snapshot('mcp_tool_calls_total');
         $tools = array_map(
-            static fn ($sample): string => $sample->labels->labels['tool'],
+            static fn($sample): string => $sample->labels->labels['tool'],
             $counter->samples,
         );
         sort($tools);

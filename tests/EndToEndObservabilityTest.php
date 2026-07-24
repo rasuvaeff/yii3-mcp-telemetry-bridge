@@ -70,7 +70,7 @@ final class EndToEndObservabilityTest
         Assert::true($span->ended);
 
         $names = array_map(
-            static fn ($snapshot): string => $snapshot->name,
+            static fn($snapshot): string => $snapshot->name,
             $this->provider->snapshots(),
         );
         sort($names);

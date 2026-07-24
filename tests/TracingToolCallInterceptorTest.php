@@ -35,7 +35,7 @@ final class TracingToolCallInterceptorTest
 
         $result = $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: []),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         Assert::same($result, 'paid');
@@ -48,11 +48,12 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: []),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         $span = $this->tracer->spans[0];
 
+        Assert::same($span->attributes['mcp.tool'], 'order.status');
         Assert::same($span->attributes['mcp.outcome'], 'success');
         Assert::same($span->statusCode, SpanStatusCode::Unset);
         Assert::true($span->ended);
@@ -64,7 +65,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: ['orderId' => '42', 'password' => 'p@ss']),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         Assert::same(
@@ -82,7 +83,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: ['orderId' => '42', 'password' => 'p@ss']),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         Assert::same(
@@ -99,7 +100,7 @@ final class TracingToolCallInterceptorTest
         try {
             $interceptor->intercept(
                 new ToolCallContext(toolName: 'order.status', arguments: []),
-                static fn (): string => throw $boom,
+                static fn(): string => throw $boom,
             );
 
             Assert::true(false);
@@ -122,7 +123,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: [], session: $session, clientId: 'ci-bot'),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         $attributes = $this->tracer->spans[0]->attributes;
@@ -139,7 +140,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: []),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         $attributes = $this->tracer->spans[0]->attributes;
@@ -157,7 +158,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         $attributes = $this->tracer->spans[0]->attributes;
@@ -173,7 +174,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         Assert::same($this->tracer->spans[0]->attributes['mcp.session.budget_remaining'], 0);
@@ -186,7 +187,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         $attributes = $this->tracer->spans[0]->attributes;
@@ -194,6 +195,35 @@ final class TracingToolCallInterceptorTest
         Assert::true(is_string($attributes['mcp.session.id']));
         Assert::false(array_key_exists('mcp.session.calls_used', $attributes));
         Assert::false(array_key_exists('mcp.session.budget_remaining', $attributes));
+    }
+
+    public function clientVersionIsOmittedWhenTheHandshakeCarriesNone(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+        $session = new FakeSession(['client_info' => ['name' => 'claude']]);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),
+            static fn(): string => 'paid',
+        );
+
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::same($attributes['mcp.client.name'], 'claude');
+        Assert::false(array_key_exists('mcp.client.version', $attributes));
+    }
+
+    public function sessionBudgetOfOneIsAccepted(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer, sessionBudget: 1);
+        $session = new FakeSession(['rasuvaeff.yii3-mcp.tool-calls' => 1]);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),
+            static fn(): string => 'paid',
+        );
+
+        Assert::same($this->tracer->spans[0]->attributes['mcp.session.budget_remaining'], 0);
     }
 
     public function throwsOnNonPositiveSessionBudget(): void

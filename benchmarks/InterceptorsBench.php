@@ -12,6 +12,11 @@ use Rasuvaeff\Yii3Metrics\NullMeterProvider;
 use Rasuvaeff\Yii3Telemetry\NullTracer;
 use Testo\Bench;
 
+/**
+ * Measures the per-call overhead each interceptor adds on top of a bare tool
+ * handler (Null tracing/metrics backends, so only the bridge's own work —
+ * masking, attribute building, label sets — is on the clock).
+ */
 final class InterceptorsBench
 {
     private TracingToolCallInterceptor $tracing;
@@ -30,15 +35,32 @@ final class InterceptorsBench
         );
     }
 
-    #[Bench]
-    public function tracingInterceptSuccessfulCall(): void
+    #[Bench(
+        callables: [
+            'bare handler' => [self::class, 'bareToolCall'],
+        ],
+        calls: 100_000,
+        iterations: 5,
+    )]
+    public function tracingInterceptedCall(): mixed
     {
-        $this->tracing->intercept($this->context, static fn (): string => 'paid');
+        return $this->tracing->intercept($this->context, static fn (): string => 'paid');
     }
 
-    #[Bench]
-    public function metricsInterceptSuccessfulCall(): void
+    #[Bench(
+        callables: [
+            'bare handler' => [self::class, 'bareToolCall'],
+        ],
+        calls: 100_000,
+        iterations: 5,
+    )]
+    public function metricsInterceptedCall(): mixed
     {
-        $this->metrics->intercept($this->context, static fn (): string => 'paid');
+        return $this->metrics->intercept($this->context, static fn (): string => 'paid');
+    }
+
+    public static function bareToolCall(): string
+    {
+        return 'paid';
     }
 }

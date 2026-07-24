@@ -7,8 +7,8 @@ namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests\Support;
 use Rasuvaeff\Yii3Telemetry\SpanInterface;
 use Rasuvaeff\Yii3Telemetry\SpanStatusCode;
 use Rasuvaeff\Yii3Telemetry\TraceContext;
-use Rasuvaeff\Yii3Telemetry\TracerInterface;
 use Rasuvaeff\Yii3Telemetry\TraceKind;
+use Rasuvaeff\Yii3Telemetry\TracerInterface;
 
 /**
  * Minimal TracerInterface double honoring the frozen trace() contract:

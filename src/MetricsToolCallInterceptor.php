@@ -73,6 +73,6 @@ final readonly class MetricsToolCallInterceptor implements ToolCallInterceptorIn
     private function record(string $tool, int $startedAt, string $outcome): void
     {
         $this->calls->inc(labels: new LabelSet(['tool' => $tool, 'outcome' => $outcome]));
-        $this->duration->observe((hrtime(true) - $startedAt) / 1e9, new LabelSet(['tool' => $tool]));
+        $this->duration->observe((float) (hrtime(true) - $startedAt) / 1e9, new LabelSet(['tool' => $tool]));
     }
 }

@@ -90,6 +90,8 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
         }
 
         $info = $context->getClientInfo();
+
+        /** @var mixed $name */
         $name = $info['name'] ?? null;
 
         if (is_string($name) && $name !== '') {
