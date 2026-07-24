@@ -65,7 +65,8 @@ final class EndToEndObservabilityTest
 
         Assert::same($span->name, 'mcp.tool order.status');
         Assert::same($span->attributes['mcp.outcome'], 'success');
-        Assert::same($span->attributes['mcp.tool.arguments'], ['orderId' => '42', 'password' => '***']);
+        Assert::same($span->attributes['mcp.tool.argument.orderId'], '42');
+        Assert::same($span->attributes['mcp.tool.argument.password'], '***');
         Assert::same($span->attributes['mcp.client.name'], 'mcp-tester');
         Assert::true($span->ended);
 

@@ -8,8 +8,9 @@ Bridge between `rasuvaeff/yii3-mcp` and the Yii3 observability stack
 (namespace `Rasuvaeff\Yii3McpTelemetryBridge`): two independent
 `ToolCallInterceptorInterface` implementations. `TracingToolCallInterceptor`
 wraps every MCP `tools/call` in a `mcp.tool <name>` span via
-`rasuvaeff/yii3-telemetry` (masked arguments, client identity, session id,
-outcome, optional session-budget remainder). `MetricsToolCallInterceptor`
+`rasuvaeff/yii3-telemetry` (per-argument masked/stringified/truncated
+attributes, client identity, session id, outcome, optional session-budget
+remainder). `MetricsToolCallInterceptor`
 records `mcp_tool_calls_total{tool,outcome}` and
 `mcp_tool_call_duration_seconds{tool}` via `rasuvaeff/yii3-metrics`.
 
@@ -50,6 +51,18 @@ works, no path repos needed.
 - **Metric names are Prometheus-strict** (underscores, no dots) — the
   yii3-metrics name regex rejects dotted names even in `NullMeter`. Span
   names/attributes are dotted (OTel style). Don't "unify" them.
+- **Arguments are flattened to `mcp.tool.argument.<name>` SCALARS** —
+  masked, stringified (arrays as JSON), truncated at 200 bytes. Never
+  revert to a single array attribute: the OTel attribute model accepts
+  only primitives/homogeneous lists, so an OTel backend drops nested
+  assoc arrays and strips keys from flat ones. Mirrors OtelMiddleware's
+  `http.request.param.<name>` in yii3-telemetry-otel.
+- **Telemetry blind spots are documented, not bugs**: budget rejections
+  happen outside this bridge (core auto-adds SessionBudgetInterceptor
+  outermost — no span, no metric), and interceptor rejections
+  (ToolCallException) count as `outcome=error` until the core grows a
+  unified outcome model. Keep the README "What the telemetry does NOT
+  see" section in sync.
 - The duration histogram deliberately has NO `outcome` label (cardinality);
   errors are distinguished by the counter. Document, don't "fix".
 - `TracingToolCallInterceptor::BUDGET_COUNTER_KEY` mirrors the PRIVATE

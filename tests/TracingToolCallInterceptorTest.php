@@ -68,10 +68,10 @@ final class TracingToolCallInterceptorTest
             static fn(): string => 'paid',
         );
 
-        Assert::same(
-            $this->tracer->spans[0]->attributes['mcp.tool.arguments'],
-            ['orderId' => '42', 'password' => '***'],
-        );
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::same($attributes['mcp.tool.argument.orderId'], '42');
+        Assert::same($attributes['mcp.tool.argument.password'], '***');
     }
 
     public function customMaskerIsHonored(): void
@@ -86,10 +86,62 @@ final class TracingToolCallInterceptorTest
             static fn(): string => 'paid',
         );
 
-        Assert::same(
-            $this->tracer->spans[0]->attributes['mcp.tool.arguments'],
-            ['orderId' => '***', 'password' => 'p@ss'],
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::same($attributes['mcp.tool.argument.orderId'], '***');
+        Assert::same($attributes['mcp.tool.argument.password'], 'p@ss');
+    }
+
+    public function everyArgumentBecomesItsOwnScalarAttribute(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: [
+                'count' => 7,
+                'ratio' => 0.5,
+                'dryRun' => true,
+                'note' => null,
+                'filter' => ['status' => 'paid', 'password' => 'p@ss'],
+            ]),
+            static fn(): string => 'paid',
         );
+
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::same($attributes['mcp.tool.argument.count'], '7');
+        Assert::same($attributes['mcp.tool.argument.ratio'], '0.5');
+        Assert::same($attributes['mcp.tool.argument.dryRun'], 'true');
+        Assert::same($attributes['mcp.tool.argument.note'], 'null');
+        Assert::same($attributes['mcp.tool.argument.filter'], '{"status":"paid","password":"***"}');
+    }
+
+    public function longArgumentValuesAreTruncatedFromTheStart(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: ['blob' => 'HEAD' . str_repeat('x', 300)]),
+            static fn(): string => 'paid',
+        );
+
+        Assert::same(
+            $this->tracer->spans[0]->attributes['mcp.tool.argument.blob'],
+            'HEAD' . str_repeat('x', 196) . '…',
+        );
+    }
+
+    public function argumentValueOfExactlyTheLimitIsNotTruncated(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+        $value = str_repeat('x', 200);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: ['blob' => $value]),
+            static fn(): string => 'paid',
+        );
+
+        Assert::same($this->tracer->spans[0]->attributes['mcp.tool.argument.blob'], $value);
     }
 
     public function failureMarksOutcomeErrorAndRethrowsTheOriginalException(): void

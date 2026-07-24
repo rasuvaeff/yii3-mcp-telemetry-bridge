@@ -18,18 +18,31 @@ use Throwable;
  * handshake info), the session id and — when the session budget is
  * configured — how many calls remain.
  *
+ * Arguments are recorded as one scalar attribute per argument
+ * (`mcp.tool.argument.<name>`), masked, stringified and truncated — the
+ * OTel attribute model only accepts primitives and homogeneous lists of
+ * primitives, so a single nested-array attribute would be dropped by the
+ * OTel backend (same flattening the ecosystem's OtelMiddleware uses for
+ * `http.request.param.<name>`).
+ *
  * The span follows the frozen trace() contract of rasuvaeff/yii3-telemetry:
  * a tool exception is recorded on the span, the span status becomes Error
  * and the ORIGINAL exception is rethrown, so the MCP error envelope the
  * agent sees is unchanged. The `mcp.outcome` attribute mirrors the result
  * (`success`/`error`) for backends that filter by attribute rather than by
- * span status.
+ * span status. A rejection thrown by an inner interceptor (RBAC, rate
+ * limit) also counts as `error` — a unified outcome model is a planned
+ * core-level change.
  *
  * @api
  */
 final readonly class TracingToolCallInterceptor implements ToolCallInterceptorInterface
 {
     private const string SPAN_PREFIX = 'mcp.tool ';
+
+    private const string ARGUMENT_ATTR_PREFIX = 'mcp.tool.argument.';
+
+    private const int MAX_ARGUMENT_VALUE_LENGTH = 200;
 
     /**
      * Mirrors the private per-session counter key of yii3-mcp's
@@ -82,8 +95,12 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
     {
         $attributes = [
             'mcp.tool' => $context->toolName,
-            'mcp.tool.arguments' => $this->argumentMasker->mask($context->arguments),
         ];
+
+        /** @var mixed $value */
+        foreach ($this->argumentMasker->mask($context->arguments) as $name => $value) {
+            $attributes[self::ARGUMENT_ATTR_PREFIX . $name] = $this->stringifyArgument($value);
+        }
 
         if ($context->clientId !== null) {
             $attributes['mcp.client.id'] = $context->clientId;
@@ -125,5 +142,27 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
         }
 
         return $attributes;
+    }
+
+    private function stringifyArgument(mixed $value): string
+    {
+        if (is_string($value)) {
+            $string = $value;
+        } elseif (is_bool($value)) {
+            $string = $value ? 'true' : 'false';
+        } elseif ($value === null) {
+            $string = 'null';
+        } elseif (is_scalar($value)) {
+            $string = (string) $value;
+        } else {
+            $encoded = json_encode($value, JSON_UNESCAPED_UNICODE);
+            $string = $encoded === false ? '(unserializable)' : $encoded;
+        }
+
+        // Byte-based truncation — may split a multibyte character at the edge,
+        // acceptable for debug attributes (no mb_* runtime dependency).
+        return strlen($string) > self::MAX_ARGUMENT_VALUE_LENGTH
+            ? substr($string, 0, self::MAX_ARGUMENT_VALUE_LENGTH) . '…'
+            : $string;
     }
 }

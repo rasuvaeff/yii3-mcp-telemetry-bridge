@@ -65,7 +65,7 @@ configurator-регистрации — становится одним span'о�
 |---|---|
 | name | `mcp.tool <имя tool>` (например `mcp.tool order.status`) |
 | `mcp.tool` | имя tool |
-| `mcp.tool.arguments` | аргументы с замаскированными чувствительными ключами (`***`) |
+| `mcp.tool.argument.<name>` | по скалярному атрибуту на аргумент: маскирование (`***`), stringify (массивы — JSON), усечение до 200 байт |
 | `mcp.outcome` | `success` / `error` |
 | `mcp.client.id` | identity из endpoint-секрета (при нескольких секретах); отсутствует в stdio |
 | `mcp.client.name` / `mcp.client.version` | клиент из initialize handshake |
@@ -76,6 +76,10 @@ configurator-регистрации — становится одним span'о�
 
 Исключение tool'а записывается на span и **перебрасывается** — MCP
 error envelope, который видит агент, не меняется.
+
+Аргументы намеренно разложены в отдельные скалярные атрибуты: модель
+атрибутов OTel принимает только примитивы и гомогенные списки, поэтому
+один вложенный массив-атрибут OTel-backend молча отбросил бы.
 
 Ручная сборка:
 
@@ -88,7 +92,19 @@ $interceptor = new TracingToolCallInterceptor(
 ```
 
 `sessionBudget` влияет только на атрибут `mcp.session.budget_remaining` —
-сам бюджет enforce'ит `SessionBudgetInterceptor` из yii3-mcp.
+сам бюджет enforce'ит `SessionBudgetInterceptor` из yii3-mcp. `int` не
+автовайрится — зеркальте параметр `session.budget` в DI-фабрике:
+
+```php
+// config/common/di/mcp-telemetry.php
+use Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor;
+use Rasuvaeff\Yii3Telemetry\TracerInterface;
+
+return [
+    TracingToolCallInterceptor::class => static fn (TracerInterface $tracer) =>
+        new TracingToolCallInterceptor($tracer, sessionBudget: 50),
+];
+```
 
 ### Метрики: `MetricsToolCallInterceptor`
 
@@ -122,6 +138,19 @@ RBAC, audit) и сбои остальных интерцепторов попа�
     // ... RBAC / audit / rate-limit интерцепторы
 ],
 ```
+
+### Чего телеметрия НЕ видит
+
+- **Отказы по бюджету невидимы.** yii3-mcp добавляет свой
+  `SessionBudgetInterceptor` самым внешним — снаружи любых интерцепторов
+  из вашего списка. Вызов, отбитый session budget, не создаёт ни span,
+  ни метрику: исчерпанный бюджет выглядит как падение трафика в ноль.
+  Следите за атрибутом `mcp.session.budget_remaining` на проходящих вызовах.
+- **Отказы считаются ошибками.** `ToolCallException` из внутреннего
+  интерцептора (RBAC-запрет, rate limit) неотличим от падения tool'а:
+  статус span'а `Error`, counter `outcome="error"`. Пороги алертов на
+  error-rate должны учитывать ожидаемые отказы; отдельный outcome
+  `rejected` появится с единой outcome-моделью в ядре yii3-mcp.
 
 ### stdio-режим (`mcp:serve`)
 

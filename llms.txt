@@ -18,9 +18,15 @@ composer require rasuvaeff/yii3-mcp-telemetry-bridge
 - Tool exceptions are ALWAYS rethrown unchanged — the bridge never alters
   the MCP error envelope. On failure the span gets the recorded exception +
   `Error` status; the counter gets `outcome="error"`.
-- Arguments reach the span masked by yii3-mcp's `ArgumentMasker`
+- Arguments reach the span as one SCALAR attribute per argument
+  (`mcp.tool.argument.<name>`): masked by yii3-mcp's `ArgumentMasker`
   (case-insensitive key match at every nesting level; default keys:
-  password, secret, token, api_key, credit_card).
+  password, secret, token, api_key, credit_card), stringified (arrays as
+  JSON) and truncated at 200 bytes. Never a single array attribute — the
+  OTel attribute model would drop it.
+- Budget rejections are invisible to this bridge (yii3-mcp auto-adds the
+  budget interceptor outermost); interceptor rejections (RBAC/rate limit)
+  count as `outcome=error`.
 - Metric names are Prometheus-strict; the duration histogram has no
   `outcome` label (cardinality) — errors are counted by the counter.
 - Put `TracingToolCallInterceptor` first (outermost) in the interceptor
@@ -43,8 +49,9 @@ new TracingToolCallInterceptor(
 );
 ```
 
-Span: name `mcp.tool <tool>`; attributes `mcp.tool`, `mcp.tool.arguments`
-(masked), `mcp.outcome` (`success`/`error`), `mcp.client.id` (when the
+Span: name `mcp.tool <tool>`; attributes `mcp.tool`,
+`mcp.tool.argument.<name>` (masked + stringified + truncated, one per
+argument), `mcp.outcome` (`success`/`error`), `mcp.client.id` (when the
 transport carries one), `mcp.client.name`/`mcp.client.version` (initialize
 handshake), `mcp.session.id`, `mcp.session.calls_used`,
 `mcp.session.budget_remaining` (only with `sessionBudget`).

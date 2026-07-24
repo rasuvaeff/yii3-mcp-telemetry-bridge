@@ -64,7 +64,7 @@ configurator-registered handlers — becomes one span:
 |---|---|
 | name | `mcp.tool <tool name>` (e.g. `mcp.tool order.status`) |
 | `mcp.tool` | tool name |
-| `mcp.tool.arguments` | arguments with sensitive keys masked (`***`) |
+| `mcp.tool.argument.<name>` | one scalar attribute per argument: masked (`***`), stringified (arrays as JSON), truncated at 200 bytes |
 | `mcp.outcome` | `success` / `error` |
 | `mcp.client.id` | identity from the endpoint secret (multi-secret setups); absent on stdio |
 | `mcp.client.name` / `mcp.client.version` | client from the initialize handshake |
@@ -75,6 +75,10 @@ configurator-registered handlers — becomes one span:
 
 A tool exception is recorded on the span and **rethrown** — the MCP error
 envelope the agent sees is unchanged.
+
+Arguments are flattened to per-argument scalar attributes on purpose: the
+OTel attribute model accepts only primitives and homogeneous lists, so a
+single nested-array attribute would be silently dropped by an OTel backend.
 
 Manual wiring:
 
@@ -87,7 +91,19 @@ $interceptor = new TracingToolCallInterceptor(
 ```
 
 `sessionBudget` only feeds the `mcp.session.budget_remaining` attribute — the
-budget itself is enforced by yii3-mcp's `SessionBudgetInterceptor`.
+budget itself is enforced by yii3-mcp's `SessionBudgetInterceptor`. Since an
+`int` cannot be autowired, mirror your `session.budget` param in a DI factory:
+
+```php
+// config/common/di/mcp-telemetry.php
+use Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor;
+use Rasuvaeff\Yii3Telemetry\TracerInterface;
+
+return [
+    TracingToolCallInterceptor::class => static fn (TracerInterface $tracer) =>
+        new TracingToolCallInterceptor($tracer, sessionBudget: 50),
+];
+```
 
 ### Metrics: `MetricsToolCallInterceptor`
 
@@ -121,6 +137,19 @@ RBAC, audit) and other interceptors' failures land on the span:
     // ... RBAC / audit / rate-limit interceptors
 ],
 ```
+
+### What the telemetry does NOT see
+
+- **Budget rejections are invisible.** yii3-mcp auto-adds its
+  `SessionBudgetInterceptor` outermost — outside any interceptor you list.
+  A call rejected by the session budget produces no span and no metric, so
+  an exhausted budget looks like traffic dropping to zero. Watch the
+  `mcp.session.budget_remaining` attribute on the calls that do go through.
+- **Rejections count as errors.** A `ToolCallException` thrown by an inner
+  interceptor (RBAC denial, rate limit) is indistinguishable from a tool
+  failure: span status `Error`, counter `outcome="error"`. Alert thresholds
+  on error rate should account for expected rejections; a separate
+  `rejected` outcome awaits a unified outcome model in the yii3-mcp core.
 
 ### stdio mode (`mcp:serve`)
 
