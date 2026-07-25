@@ -101,10 +101,36 @@ use Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor;
 use Rasuvaeff\Yii3Telemetry\TracerInterface;
 
 return [
-    TracingToolCallInterceptor::class => static fn (TracerInterface $tracer) =>
-        new TracingToolCallInterceptor($tracer, sessionBudget: 50),
+    TracingToolCallInterceptor::class => static function (TracerInterface $tracer) use ($params) {
+        $budget = $params['rasuvaeff/yii3-mcp']['session']['budget'] ?? 0;
+
+        return new TracingToolCallInterceptor($tracer, sessionBudget: $budget);
+    },
 ];
 ```
+
+`null` и core default `0` означают unlimited и не публикуют
+`mcp.session.budget_remaining`; любое положительное значение публикует его.
+Отрицательные значения отклоняются.
+
+### OpenTelemetry и Fiber из SDK
+
+`mcp/sdk` запускает request handlers в Fiber. Поддерживаемый concurrent path:
+NTS PHP, `ext-ffi`, `OTEL_PHP_FIBERS_ENABLED=true` и, если FPM подключает
+observer слишком поздно, preload `vendor/autoload.php`. Integration suite
+проверяет один HTTP parent, дочерний `mcp.tool ...` span и изоляцию контекстов
+чередующихся Fiber:
+
+```bash
+MCP_OTEL_FIBER_TEST=1 vendor/bin/testo --suite=Integration
+```
+
+Только для строго последовательного php-fpm допустим ограниченный fallback:
+`Context::setStorage(new ContextStorage())` до начала tracing. Он использует
+один current context и небезопасен для event loop или конкурентных Fiber с
+suspend/resume. Нельзя добавлять `fork()/switch()` только вокруг
+`TracingToolCallInterceptor::$next`: Fiber SDK уже создан, а interceptor не
+видит все lifecycle transitions.
 
 ### Метрики: `MetricsToolCallInterceptor`
 
@@ -179,6 +205,27 @@ processor), иначе span'ы копятся до отключения аген
 | Скрипт | Показывает | Нужен сервер? |
 |--------|-------|:-------------:|
 | [`tool-call-observability.php`](examples/tool-call-observability.php) | Вызов tool'а со span'ом (через `LogTracer`) и метриками (in-memory snapshot), аргумент `password` замаскирован | нет |
+
+### Анализаторы зависимостей
+
+Это leaf-пакет, который root-приложение выбирает через config-plugin, поэтому в
+autoloaded source может законно не быть прямой ссылки на его классы. Сохраняйте
+direct dependency: backend или bridge выбирает приложение, а не core-пакет.
+Исключение Composer Dependency Analyser должно быть ограничено этим пакетом:
+
+```php
+use ShipMonk\ComposerDependencyAnalyser\Config\Configuration;
+use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
+
+return (new Configuration())->ignoreErrorsOnPackage(
+    'rasuvaeff/yii3-mcp-telemetry-bridge',
+    [ErrorType::UNUSED_DEPENDENCY],
+);
+```
+
+`composer-require-checker` ищет используемые, но не объявленные symbols, а не
+unused packages, поэтому для такой config-only зависимости suppression ему не
+нужен.
 
 ## Разработка
 

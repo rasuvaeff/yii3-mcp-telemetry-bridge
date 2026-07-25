@@ -100,10 +100,36 @@ use Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor;
 use Rasuvaeff\Yii3Telemetry\TracerInterface;
 
 return [
-    TracingToolCallInterceptor::class => static fn (TracerInterface $tracer) =>
-        new TracingToolCallInterceptor($tracer, sessionBudget: 50),
+    TracingToolCallInterceptor::class => static function (TracerInterface $tracer) use ($params) {
+        $budget = $params['rasuvaeff/yii3-mcp']['session']['budget'] ?? 0;
+
+        return new TracingToolCallInterceptor($tracer, sessionBudget: $budget);
+    },
 ];
 ```
+
+`null` and the core default `0` both mean unlimited and omit
+`mcp.session.budget_remaining`; every positive value publishes it. Negative
+values are rejected.
+
+### OpenTelemetry and SDK Fibers
+
+`mcp/sdk` runs request handlers in Fibers. The supported concurrent deployment
+uses OTel automatic Fiber propagation: NTS PHP, `ext-ffi`,
+`OTEL_PHP_FIBERS_ENABLED=true`, and (where FPM loads the observer too late)
+preloaded `vendor/autoload.php`. The Integration suite verifies one HTTP parent,
+one child `mcp.tool ...` span and isolation across alternating Fibers:
+
+```bash
+MCP_OTEL_FIBER_TEST=1 vendor/bin/testo --suite=Integration
+```
+
+For strictly sequential php-fpm only, a limited fallback is
+`Context::setStorage(new ContextStorage())` before tracing starts. It shares a
+single current context and is unsafe for event loops or any Fiber that can
+suspend/resume concurrently. Do not add `fork()/switch()` only around
+`TracingToolCallInterceptor::$next`: the SDK Fiber already exists and the
+interceptor cannot observe every lifecycle transition.
 
 ### Metrics: `MetricsToolCallInterceptor`
 
@@ -178,6 +204,26 @@ See [examples/](examples/) — runs offline.
 | Script | Shows | Needs server? |
 |--------|-------|:-------------:|
 | [`tool-call-observability.php`](examples/tool-call-observability.php) | A tool call producing a span (logged via `LogTracer`) and metrics (in-memory snapshot), with a masked `password` argument | no |
+
+### Dependency analysers
+
+This leaf package is selected by the root application through config-plugin and
+may legitimately have no class reference in an autoloaded source directory. Keep
+the direct dependency: the application, not a core package, selects the backend
+or bridge. Scope the Composer Dependency Analyser exception to this package:
+
+```php
+use ShipMonk\ComposerDependencyAnalyser\Config\Configuration;
+use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
+
+return (new Configuration())->ignoreErrorsOnPackage(
+    'rasuvaeff/yii3-mcp-telemetry-bridge',
+    [ErrorType::UNUSED_DEPENDENCY],
+);
+```
+
+`composer-require-checker` detects used but undeclared symbols, not unused
+packages, so this config-only dependency needs no require-checker suppression.
 
 ## Development
 

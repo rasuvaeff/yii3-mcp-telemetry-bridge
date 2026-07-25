@@ -69,7 +69,8 @@ works, no path repos needed.
   counter key of yii3-mcp's `SessionBudgetInterceptor`
   (`rasuvaeff.yii3-mcp.tool-calls`). A key drift only drops the budget span
   attributes — never breaks the call. Re-check on yii3-mcp major bumps.
-- `sessionBudget` is observability-only: enforcement stays in the core's
+- `sessionBudget` is observability-only: `null` and `0` mean unlimited and omit
+  the remaining attribute; negative values are invalid. Enforcement stays in the core's
   `SessionBudgetInterceptor`. The remaining-budget attribute is computed
   AFTER the budget interceptor incremented the counter (it runs outermost),
   so it reflects the state including the current call.

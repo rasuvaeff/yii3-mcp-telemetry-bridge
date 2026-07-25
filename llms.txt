@@ -46,7 +46,7 @@ use Rasuvaeff\Yii3Mcp\Interceptor\ArgumentMasker;
 new TracingToolCallInterceptor(
     tracer: $tracer,                       // Rasuvaeff\Yii3Telemetry\TracerInterface
     argumentMasker: new ArgumentMasker(),  // optional
-    sessionBudget: 50,                     // optional, >= 1; throws InvalidArgumentException otherwise
+    sessionBudget: 50,                     // null/0 = unlimited; negative is invalid
 );
 ```
 
@@ -56,6 +56,12 @@ argument), `mcp.outcome` (`success`/`rejected`/`error` — yii3-mcp CallOutcome)
 transport carries one), `mcp.client.name`/`mcp.client.version` (initialize
 handshake), `mcp.session.id`, `mcp.session.calls_used`,
 `mcp.session.budget_remaining` (only with `sessionBudget`).
+
+The SDK executes calls in Fiber. Concurrent OTel propagation requires NTS PHP,
+ext-ffi and OTEL_PHP_FIBERS_ENABLED=true (preload vendor/autoload.php where
+needed). Plain ContextStorage is a sequential-FPM-only fallback, not safe for
+interleaved Fibers. Run `vendor/bin/testo --suite=Integration` for the real
+OTel + McpTester regression path with `MCP_OTEL_FIBER_TEST=1`.
 
 ### MetricsToolCallInterceptor
 

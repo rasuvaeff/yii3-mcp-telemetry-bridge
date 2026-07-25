@@ -51,6 +51,8 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
      */
     private const string BUDGET_COUNTER_KEY = 'rasuvaeff.yii3-mcp.tool-calls';
 
+    private ?int $sessionBudget;
+
     /**
      * @param ?int $sessionBudget the `session.budget` value configured for yii3-mcp;
      *        enables the `mcp.session.budget_remaining` attribute
@@ -58,11 +60,13 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
     public function __construct(
         private TracerInterface $tracer,
         private ArgumentMasker $argumentMasker = new ArgumentMasker(),
-        private ?int $sessionBudget = null,
+        ?int $sessionBudget = null,
     ) {
-        if ($sessionBudget !== null && $sessionBudget < 1) {
-            throw new InvalidArgumentException(sprintf('Session budget must be at least 1, %d given', $sessionBudget));
+        if ($sessionBudget !== null && $sessionBudget < 0) {
+            throw new InvalidArgumentException(sprintf('Session budget must not be negative, %d given', $sessionBudget));
         }
+
+        $this->sessionBudget = $sessionBudget === 0 ? null : $sessionBudget;
     }
 
     #[\Override]
