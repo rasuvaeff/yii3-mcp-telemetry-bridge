@@ -37,7 +37,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-          extensions: fileinfo, json
+          extensions: ffi, fileinfo, json
           tools: composer:v2
 
       - name: Cache Composer dependencies
@@ -52,6 +52,9 @@ jobs:
 
       - name: Build
         run: composer build
+
+      - name: OTel Fiber integration
+        run: MCP_OTEL_FIBER_TEST=1 vendor/bin/testo --suite=Integration
 
   prefer-lowest:
     name: Prefer lowest

@@ -301,14 +301,40 @@ final class TracingToolCallInterceptorTest
         Assert::same($this->tracer->spans[0]->attributes['mcp.session.budget_remaining'], 0);
     }
 
-    public function throwsOnNonPositiveSessionBudget(): void
+    public function zeroSessionBudgetIsUnlimitedAndOmitsRemainingAttribute(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer, sessionBudget: 0);
+        $session = new FakeSession(['rasuvaeff.yii3-mcp.tool-calls' => 3]);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),
+            static fn(): string => 'paid',
+        );
+
+        Assert::false(array_key_exists('mcp.session.budget_remaining', $this->tracer->spans[0]->attributes));
+    }
+
+    public function nullSessionBudgetOmitsRemainingAttribute(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+        $session = new FakeSession(['rasuvaeff.yii3-mcp.tool-calls' => 3]);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),
+            static fn(): string => 'paid',
+        );
+
+        Assert::false(array_key_exists('mcp.session.budget_remaining', $this->tracer->spans[0]->attributes));
+    }
+
+    public function throwsOnNegativeSessionBudget(): void
     {
         try {
-            new TracingToolCallInterceptor($this->tracer, sessionBudget: 0);
+            new TracingToolCallInterceptor($this->tracer, sessionBudget: -1);
 
             Assert::true(false);
         } catch (InvalidArgumentException $exception) {
-            Assert::string($exception->getMessage())->contains('at least 1');
+            Assert::string($exception->getMessage())->contains('must not be negative');
         }
     }
 }
