@@ -59,7 +59,9 @@ works, no path repos needed.
   `http.request.param.<name>` in yii3-telemetry-otel.
 - **Telemetry blind spots are documented, not bugs**: budget rejections
   happen outside this bridge (core auto-adds SessionBudgetInterceptor
-  outermost — no span, no metric). Outcomes follow yii3-mcp's `CallOutcome`
+  outermost — no span, no metric); session-ownership rejections likewise
+  (core 2.0 rejects a foreign/ownerless session before the interceptor
+  chain — no span, no metric). Outcomes follow yii3-mcp's `CallOutcome`
   (`success`/`rejected`/`error`): ToolCallException => `rejected`; never
   reclassify locally — the audit bridge uses the same vocabulary. Keep the
   README "What the telemetry does NOT see" section in sync.
