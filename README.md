@@ -22,7 +22,7 @@ Observability for MCP servers: a trace span and RED-style metrics for every
 | Requirement | Version |
 |-------------|---------|
 | PHP | 8.3 – 8.5 |
-| `rasuvaeff/yii3-mcp` | `^1.6` |
+| `rasuvaeff/yii3-mcp` | `^1.6 \|\| ^2.0` |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
 | `rasuvaeff/yii3-metrics` | `^1.0` |
 
@@ -171,6 +171,13 @@ RBAC, audit) and other interceptors' failures land on the span:
   A call rejected by the session budget produces no span and no metric, so
   an exhausted budget looks like traffic dropping to zero. Watch the
   `mcp.session.budget_remaining` attribute on the calls that do go through.
+- **Session-ownership rejections are invisible** (yii3-mcp `^2.0`). The core
+  binds every session to the MCP client that created it and rejects a call
+  against a foreign or ownerless session (the SDK-shaped 404 from `McpAction`,
+  `SessionOwnershipException` from `InterceptingReferenceHandler`) **before**
+  the interceptor chain runs. An ownership-rejected call produces no span and
+  no `mcp_tool_calls_total` increment — hijack attempts show up only in the
+  application/web-server logs, not in the telemetry.
 - **Rejections are `rejected`, not `error`.** A `ToolCallException` thrown
   by an inner interceptor (RBAC denial, rate limit, session budget) or the
   tool itself is classified via yii3-mcp's `CallOutcome`: counter
