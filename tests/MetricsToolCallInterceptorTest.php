@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
 use Mcp\Exception\ToolCallException;
+use Rasuvaeff\Understudy\Arg;
+use Rasuvaeff\Understudy\Understudy;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\MetricsToolCallInterceptor;
-use Rasuvaeff\Yii3McpTelemetryBridge\Tests\Support\DeclaringMeterProvider;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
+use Rasuvaeff\Yii3Metrics\MeterInterface;
+use Rasuvaeff\Yii3Metrics\MeterProviderInterface;
 use Rasuvaeff\Yii3Metrics\MetricRegistry;
 use Rasuvaeff\Yii3Metrics\MetricSnapshot;
 use RuntimeException;
@@ -16,6 +19,9 @@ use Testo\Assert;
 use Testo\Codecov\Covers;
 use Testo\Lifecycle\BeforeTest;
 use Testo\Test;
+
+use function Rasuvaeff\Understudy\verify;
+use function Rasuvaeff\Understudy\when;
 
 #[Test]
 #[Covers(MetricsToolCallInterceptor::class)]
@@ -115,13 +121,13 @@ final class MetricsToolCallInterceptorTest
 
     public function instrumentsDeclareTheirLabelNames(): void
     {
-        $provider = new DeclaringMeterProvider();
+        $provider = Understudy::for(MeterProviderInterface::class, MeterInterface::class);
+        when(fn() => $provider->getMeter())->returns($provider);
 
         new MetricsToolCallInterceptor(new MetricRegistry($provider), durationBuckets: [1.0, 5.0]);
 
-        Assert::same($provider->declarations['mcp_tool_calls_total']['labelNames'], ['tool', 'outcome']);
-        Assert::same($provider->declarations['mcp_tool_call_duration_seconds']['labelNames'], ['tool']);
-        Assert::same($provider->declarations['mcp_tool_call_duration_seconds']['buckets'], [1.0, 5.0]);
+        verify(fn() => $provider->counter('mcp_tool_calls_total', Arg::any(), ['tool', 'outcome']));
+        verify(fn() => $provider->histogram('mcp_tool_call_duration_seconds', Arg::any(), ['tool'], [1.0, 5.0]));
     }
 
     public function repeatedCallsAccumulateIntoTheSameCounter(): void
