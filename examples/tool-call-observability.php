@@ -68,6 +68,14 @@ echo 'tool result: ' . $result['content'][0]['text'] . "\n\n";
 
 foreach ($provider->snapshots() as $snapshot) {
     foreach ($snapshot->samples as $sample) {
-        echo sprintf("%s{%s} = %s\n", $snapshot->name, $sample->labels->key(), $sample->value);
+        // Rendered by hand, not via LabelSet::key(): the key is an internal
+        // canonical form (length-prefixed since yii3-metrics 2.0), not a
+        // display format.
+        $labels = implode(', ', array_map(
+            static fn(string $name, string $value): string => $name . '="' . $value . '"',
+            array_keys($sample->labels->labels),
+            $sample->labels->labels,
+        ));
+        echo sprintf("%s{%s} = %s\n", $snapshot->name, $labels, $sample->value);
     }
 }

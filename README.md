@@ -24,7 +24,7 @@ Observability for MCP servers: a trace span and RED-style metrics for every
 | PHP | 8.3 – 8.5 |
 | `rasuvaeff/yii3-mcp` | `^1.6 \|\| ^2.0` |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
-| `rasuvaeff/yii3-metrics` | `^1.0` |
+| `rasuvaeff/yii3-metrics` | `^1.0 \|\| ^2.0` |
 
 Both observability cores are vendor-neutral; wire a backend
 (`yii3-telemetry-otel`, `yii3-metrics-prometheus`) or the `Null*` providers.
