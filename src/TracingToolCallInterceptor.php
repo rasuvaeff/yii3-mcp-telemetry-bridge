@@ -10,14 +10,25 @@ use Rasuvaeff\Yii3Mcp\Interceptor\CallOutcome;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallInterceptorInterface;
 use Rasuvaeff\Yii3Telemetry\SpanInterface;
+use Rasuvaeff\Yii3Telemetry\TraceContextPropagator;
 use Rasuvaeff\Yii3Telemetry\TracerInterface;
 use Throwable;
 
 /**
  * Wraps every MCP tools/call in a `mcp.tool <name>` span: the tool name,
- * masked arguments, the client identity (endpoint secret id and initialize
- * handshake info), the session id and — when the session budget is
- * configured — how many calls remain.
+ * masked arguments, the client identity (endpoint secret id and the client's
+ * name/version), the session id and — when the session budget is configured —
+ * how many calls remain, plus the caller's W3C trace context.
+ *
+ * Session attributes are recorded on the handshake era only. On the stateless
+ * 2026-07-28 era the session is a throwaway the SDK builds for one request:
+ * its id names nothing and the per-session budget counter never moves there
+ * (yii3-mcp counts that era's budget per client in PSR-16, out of reach here).
+ *
+ * The caller's `traceparent` (stateless era, `_meta`) cannot parent the span —
+ * yii3-telemetry's trace() takes no remote parent — so it is recorded as
+ * `mcp.caller.trace_id` / `mcp.caller.span_id`, and only when it parses as a
+ * valid W3C context: the value is caller-controlled.
  *
  * Arguments are recorded as one scalar attribute per argument
  * (`mcp.tool.argument.<name>`), masked, stringified and truncated — the
@@ -46,21 +57,22 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
 
     /**
      * Mirrors the private per-session counter key of yii3-mcp's
-     * SessionBudgetInterceptor; a key drift only drops the budget
-     * attributes, it never breaks the call.
+     * ToolCallBudgetInterceptor (handshake era); a key drift only drops the
+     * budget attributes, it never breaks the call.
      */
     private const string BUDGET_COUNTER_KEY = 'rasuvaeff.yii3-mcp.tool-calls';
 
     private ?int $sessionBudget;
 
     /**
-     * @param ?int $sessionBudget the `session.budget` value configured for yii3-mcp;
-     *        enables the `mcp.session.budget_remaining` attribute
+     * @param ?int $sessionBudget the `tool_call_budget.calls` value configured for yii3-mcp;
+     *        enables the `mcp.session.budget_remaining` attribute (handshake era)
      */
     public function __construct(
         private TracerInterface $tracer,
         private ArgumentMasker $argumentMasker = new ArgumentMasker(),
         ?int $sessionBudget = null,
+        private TraceContextPropagator $propagator = new TraceContextPropagator(),
     ) {
         if ($sessionBudget !== null && $sessionBudget < 0) {
             throw new InvalidArgumentException(sprintf('Session budget must not be negative, %d given', $sessionBudget));
@@ -110,25 +122,26 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
             $attributes['mcp.client.id'] = $context->clientId;
         }
 
-        $info = $context->getClientInfo();
+        $info = $context->clientInfo();
 
-        /** @var mixed $name */
-        $name = $info['name'] ?? null;
-
-        if (is_string($name) && $name !== '') {
-            $attributes['mcp.client.name'] = $name;
+        if ($info !== null && $info->name !== '') {
+            $attributes['mcp.client.name'] = $info->name;
         }
 
-        /** @var mixed $version */
-        $version = $info['version'] ?? null;
+        if ($info !== null && $info->version !== '') {
+            $attributes['mcp.client.version'] = $info->version;
+        }
 
-        if (is_string($version) && $version !== '') {
-            $attributes['mcp.client.version'] = $version;
+        $caller = $this->propagator->fromHeaders($context->requestContext?->getTraceContext() ?? []);
+
+        if ($caller->isValid()) {
+            $attributes['mcp.caller.trace_id'] = $caller->traceId;
+            $attributes['mcp.caller.span_id'] = $caller->spanId;
         }
 
         $session = $context->session;
 
-        if ($session === null) {
+        if ($session === null || $context->isStateless()) {
             return $attributes;
         }
 

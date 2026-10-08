@@ -22,7 +22,7 @@ Observability for MCP servers: a trace span and RED-style metrics for every
 | Requirement | Version |
 |-------------|---------|
 | PHP | 8.3 – 8.5 |
-| `rasuvaeff/yii3-mcp` | `^1.6 \|\| ^2.0` |
+| `rasuvaeff/yii3-mcp` | `^4.0` (yii3-mcp 1.x–3.x: bridge `^1.3`) |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
 | `rasuvaeff/yii3-metrics` | `^1.0 \|\| ^2.0` |
 
@@ -67,14 +67,22 @@ configurator-registered handlers — becomes one span:
 | `mcp.tool.argument.<name>` | one scalar attribute per argument: masked (`***`), stringified (arrays as JSON), truncated at 200 bytes |
 | `mcp.outcome` | `success` / `rejected` / `error` (yii3-mcp's shared `CallOutcome`) |
 | `mcp.client.id` | identity from the endpoint secret (multi-secret setups); absent on stdio |
-| `mcp.client.name` / `mcp.client.version` | client from the initialize handshake |
-| `mcp.session.id` | MCP session UUID |
-| `mcp.session.calls_used` | tools/call count in this session (when the session budget is on) |
-| `mcp.session.budget_remaining` | remaining budget (when `sessionBudget` is configured, see below) |
+| `mcp.client.name` / `mcp.client.version` | client as it named itself: `initialize` (handshake era) or the request's `_meta` (stateless era) |
+| `mcp.caller.trace_id` / `mcp.caller.span_id` | the caller's W3C trace context (`traceparent` in `_meta`, stateless era), when it parses as valid |
+| `mcp.session.id` | MCP session UUID — handshake era only |
+| `mcp.session.calls_used` | tools/call count in this session (when the budget is on) — handshake era only |
+| `mcp.session.budget_remaining` | remaining budget (when `sessionBudget` is configured, see below) — handshake era only |
 | status | `Error` + recorded exception on failure; `Unset` on success |
 
 A tool exception is recorded on the span and **rethrown** — the MCP error
 envelope the agent sees is unchanged.
+
+On the stateless MCP revision 2026-07-28 the SDK builds a throwaway session
+for every request: its id names nothing and the per-session budget counter
+never moves there (yii3-mcp counts that era's budget per client, in PSR-16),
+so the session attributes are left out. The caller's `traceparent` cannot
+parent the span — yii3-telemetry's `trace()` takes no remote parent — so it is
+recorded as `mcp.caller.trace_id` / `mcp.caller.span_id` for correlation.
 
 Arguments are flattened to per-argument scalar attributes on purpose: the
 OTel attribute model accepts only primitives and homogeneous lists, so a
@@ -86,13 +94,14 @@ Manual wiring:
 $interceptor = new TracingToolCallInterceptor(
     tracer: $tracer,                          // Rasuvaeff\Yii3Telemetry\TracerInterface
     argumentMasker: new ArgumentMasker(),     // default key list: password, secret, token, api_key, credit_card
-    sessionBudget: 50,                        // optional: mirror your `session.budget` param
+    sessionBudget: 50,                        // optional: mirror your `tool_call_budget.calls` param
 );
 ```
 
 `sessionBudget` only feeds the `mcp.session.budget_remaining` attribute — the
-budget itself is enforced by yii3-mcp's `SessionBudgetInterceptor`. Since an
-`int` cannot be autowired, mirror your `session.budget` param in a DI factory:
+budget itself is enforced by yii3-mcp's `ToolCallBudgetInterceptor`. Since an
+`int` cannot be autowired, mirror your `tool_call_budget.calls` param in a DI
+factory:
 
 ```php
 // config/common/di/mcp-telemetry.php
@@ -101,7 +110,7 @@ use Rasuvaeff\Yii3Telemetry\TracerInterface;
 
 return [
     TracingToolCallInterceptor::class => static function (TracerInterface $tracer) use ($params) {
-        $budget = $params['rasuvaeff/yii3-mcp']['session']['budget'] ?? 0;
+        $budget = $params['rasuvaeff/yii3-mcp']['tool_call_budget']['calls'] ?? 0;
 
         return new TracingToolCallInterceptor($tracer, sessionBudget: $budget);
     },
@@ -167,10 +176,11 @@ RBAC, audit) and other interceptors' failures land on the span:
 ### What the telemetry does NOT see
 
 - **Budget rejections are invisible.** yii3-mcp auto-adds its
-  `SessionBudgetInterceptor` outermost — outside any interceptor you list.
-  A call rejected by the session budget produces no span and no metric, so
-  an exhausted budget looks like traffic dropping to zero. Watch the
-  `mcp.session.budget_remaining` attribute on the calls that do go through.
+  `ToolCallBudgetInterceptor` outermost — outside any interceptor you list.
+  A call rejected by the budget produces no span and no metric, so an
+  exhausted budget looks like traffic dropping to zero. Watch the
+  `mcp.session.budget_remaining` attribute on the calls that do go through
+  (handshake era; the stateless era's per-client budget is not visible here).
 - **Session-ownership rejections are invisible** (yii3-mcp `^2.0`). The core
   binds every session to the MCP client that created it and rejects a call
   against a foreign or ownerless session (the SDK-shaped 404 from `McpAction`,

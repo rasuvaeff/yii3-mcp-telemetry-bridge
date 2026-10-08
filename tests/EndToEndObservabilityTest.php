@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
+use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Server\Session\InMemorySessionStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Rasuvaeff\Yii3Mcp\McpServerFactory;
@@ -35,6 +36,8 @@ final class EndToEndObservabilityTest
 
     private McpTester $tester;
 
+    private McpTester $statelessTester;
+
     #[BeforeTest]
     public function setUp(): void
     {
@@ -53,6 +56,29 @@ final class EndToEndObservabilityTest
         ]);
 
         $this->tester = new McpTester($server, $factory, $factory, $factory);
+        $this->statelessTester = new McpTester($server, $factory, $factory, $factory, ProtocolVersion::V2026_07_28);
+    }
+
+    /**
+     * The same call over the stateless 2026-07-28 era (no initialize, no
+     * session): the client still comes through from the request's _meta, the
+     * caller's trace context is recorded, and no throwaway session id is.
+     */
+    public function statelessCallIsTracedWithTheCallerButWithoutASession(): void
+    {
+        $result = $this->statelessTester->request('tools/call', [
+            'name' => 'order.status',
+            'arguments' => ['orderId' => '42', 'password' => 'p@ss'],
+            '_meta' => ['traceparent' => '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'],
+        ]);
+
+        Assert::same($result['content'][0]['text'], 'paid:42');
+
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::same($attributes['mcp.client.name'], 'mcp-tester');
+        Assert::same($attributes['mcp.caller.trace_id'], '4bf92f3577b34da6a3ce929d0e0e4736');
+        Assert::false(array_key_exists('mcp.session.id', $attributes));
     }
 
     public function toolCallProducesSpanAndMetricsWithMaskedArguments(): void
