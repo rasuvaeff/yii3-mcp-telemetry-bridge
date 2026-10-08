@@ -9,7 +9,7 @@ Bridge between `rasuvaeff/yii3-mcp` and the Yii3 observability stack
 `ToolCallInterceptorInterface` implementations. `TracingToolCallInterceptor`
 wraps every MCP `tools/call` in a `mcp.tool <name>` span via
 `rasuvaeff/yii3-telemetry` (per-argument masked/stringified/truncated
-attributes, client identity, session id, outcome, optional session-budget
+attributes, client identity, caller trace context, session id (handshake era), outcome, optional session-budget
 remainder). `MetricsToolCallInterceptor`
 records `mcp_tool_calls_total{tool,outcome}` and
 `mcp_tool_call_duration_seconds{tool}` via `rasuvaeff/yii3-metrics`.
@@ -58,22 +58,30 @@ works, no path repos needed.
   assoc arrays and strips keys from flat ones. Mirrors OtelMiddleware's
   `http.request.param.<name>` in yii3-telemetry-otel.
 - **Telemetry blind spots are documented, not bugs**: budget rejections
-  happen outside this bridge (core auto-adds SessionBudgetInterceptor
+  happen outside this bridge (core auto-adds ToolCallBudgetInterceptor
   outermost — no span, no metric); session-ownership rejections likewise
   (core 2.0 rejects a foreign/ownerless session before the interceptor
   chain — no span, no metric). Outcomes follow yii3-mcp's `CallOutcome`
   (`success`/`rejected`/`error`): ToolCallException => `rejected`; never
   reclassify locally — the audit bridge uses the same vocabulary. Keep the
   README "What the telemetry does NOT see" section in sync.
+- **Session attributes are handshake-era only.** On the stateless 2026-07-28
+  era (`$context->isStateless()`, yii3-mcp 4) the session is a throwaway the
+  SDK builds per request: recording its id would log a random UUID, and its
+  budget counter never moves. The caller's `traceparent` is recorded as
+  validated `mcp.caller.*` attributes, never as the span parent —
+  yii3-telemetry's `trace()` has no remote-parent parameter; revisit if it
+  gains one.
 - The duration histogram deliberately has NO `outcome` label (cardinality);
   errors are distinguished by the counter. Document, don't "fix".
 - `TracingToolCallInterceptor::BUDGET_COUNTER_KEY` mirrors the PRIVATE
-  counter key of yii3-mcp's `SessionBudgetInterceptor`
+  counter key of yii3-mcp's `ToolCallBudgetInterceptor` (handshake era)
   (`rasuvaeff.yii3-mcp.tool-calls`). A key drift only drops the budget span
   attributes — never breaks the call. Re-check on yii3-mcp major bumps.
 - `sessionBudget` is observability-only: `null` and `0` mean unlimited and omit
   the remaining attribute; negative values are invalid. Enforcement stays in the core's
-  `SessionBudgetInterceptor`. The remaining-budget attribute is computed
+  `ToolCallBudgetInterceptor`. The param keeps its 1.x name on purpose:
+  renaming it would break named-argument callers for a docs-level change. The remaining-budget attribute is computed
   AFTER the budget interceptor incremented the counter (it runs outermost),
   so it reflects the state including the current call.
 - The span follows yii3-telemetry's frozen `trace()` contract: exception →

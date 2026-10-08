@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- Requires `rasuvaeff/yii3-mcp` `^4.0` (mcp/sdk 0.8). Applications on yii3-mcp
+  1.x–3.x keep the 1.3 line (#14).
+- Client name/version come from yii3-mcp 4's `clientInfo()` — `initialize` on
+  the handshake era, the request's `_meta` on the stateless 2026-07-28 era. A
+  handshake clientInfo missing its name or version now records no client
+  attributes (yii3-mcp 4 reads it as absent).
+- On the stateless era the session attributes (`mcp.session.id`,
+  `mcp.session.calls_used`, `mcp.session.budget_remaining`) are omitted: the
+  session there is a per-request throwaway.
+- The caller's W3C trace context is recorded as `mcp.caller.trace_id` /
+  `mcp.caller.span_id` when valid (yii3-telemetry's `trace()` takes no remote
+  parent).
+- `sessionBudget` now mirrors yii3-mcp's `tool_call_budget.calls`.
+
 ## 1.3.1 — 2026-10-07
 
 - Allow `rasuvaeff/yii3-mcp` `^3.0` alongside the existing constraints — the

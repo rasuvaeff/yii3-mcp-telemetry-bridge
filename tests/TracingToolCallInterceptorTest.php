@@ -6,6 +6,11 @@ namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
 use InvalidArgumentException;
 use Mcp\Exception\ToolCallException;
+use Mcp\Schema\ClientCapabilities;
+use Mcp\Schema\Implementation;
+use Mcp\Schema\Request\PingRequest;
+use Mcp\Server\RequestContext;
+use Mcp\Server\Stateless\RequestMeta;
 use Rasuvaeff\Yii3Mcp\Interceptor\ArgumentMasker;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\Tests\Support\FakeSession;
@@ -226,6 +231,98 @@ final class TracingToolCallInterceptorTest
         Assert::false(array_key_exists('mcp.session.calls_used', $attributes));
     }
 
+    /**
+     * MCP requires both name and version in clientInfo; yii3-mcp 4 reads a
+     * handshake entry missing one as no client info at all.
+     */
+    public function incompleteHandshakeClientInfoRecordsNoClientAttributes(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: [], session: new FakeSession(['client_info' => ['name' => 'claude']])),
+            static fn(): string => 'paid',
+        );
+
+        Assert::false(array_key_exists('mcp.client.name', $this->tracer->spans[0]->attributes));
+    }
+
+    /**
+     * On the stateless 2026-07-28 era the session is a throwaway built for
+     * one request: its id names nothing and the per-session budget counter
+     * never moves, so neither is recorded. The client comes from the
+     * request's _meta.
+     */
+    public function statelessCallRecordsTheClientButNoSession(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer, sessionBudget: 10);
+        $session = new FakeSession([
+            RequestMeta::class => new RequestMeta('2026-07-28', new ClientCapabilities(), new Implementation(name: 'agent', version: '3.0')),
+            'rasuvaeff.yii3-mcp.tool-calls' => 3,
+        ]);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: [], session: $session, clientId: 'ci-bot'),
+            static fn(): string => 'paid',
+        );
+
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::same($attributes['mcp.client.name'], 'agent');
+        Assert::same($attributes['mcp.client.version'], '3.0');
+        Assert::same($attributes['mcp.client.id'], 'ci-bot');
+        Assert::false(array_key_exists('mcp.session.id', $attributes));
+        Assert::false(array_key_exists('mcp.session.calls_used', $attributes));
+        Assert::false(array_key_exists('mcp.session.budget_remaining', $attributes));
+    }
+
+    /**
+     * yii3-telemetry's trace() takes no remote parent, so the caller's
+     * W3C context is recorded on the span — validated, it is caller input.
+     */
+    public function callersTraceContextIsRecordedOnTheSpan(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+
+        $interceptor->intercept(
+            $this->statelessContext(['traceparent' => '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01']),
+            static fn(): string => 'paid',
+        );
+
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::same($attributes['mcp.caller.trace_id'], '4bf92f3577b34da6a3ce929d0e0e4736');
+        Assert::same($attributes['mcp.caller.span_id'], '00f067aa0ba902b7');
+    }
+
+    public function malformedOrMissingCallerTraceContextIsNotRecorded(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+
+        $interceptor->intercept($this->statelessContext(['traceparent' => 'not-a-traceparent']), static fn(): string => 'paid');
+        $interceptor->intercept($this->statelessContext([]), static fn(): string => 'paid');
+        $interceptor->intercept(new ToolCallContext(toolName: 'order.status', arguments: []), static fn(): string => 'paid');
+
+        foreach ($this->tracer->spans as $span) {
+            Assert::false(array_key_exists('mcp.caller.trace_id', $span->attributes));
+        }
+    }
+
+    /**
+     * @param array<string, string> $traceContext
+     */
+    private function statelessContext(array $traceContext): ToolCallContext
+    {
+        $session = new FakeSession([RequestMeta::class => new RequestMeta('2026-07-28', new ClientCapabilities(), traceContext: $traceContext)]);
+
+        return new ToolCallContext(
+            toolName: 'order.status',
+            arguments: [],
+            session: $session,
+            requestContext: new RequestContext($session, new PingRequest()),
+        );
+    }
+
     public function sessionBudgetAttributesReflectTheCounter(): void
     {
         $interceptor = new TracingToolCallInterceptor($this->tracer, sessionBudget: 10);
@@ -272,10 +369,10 @@ final class TracingToolCallInterceptorTest
         Assert::false(array_key_exists('mcp.session.budget_remaining', $attributes));
     }
 
-    public function clientVersionIsOmittedWhenTheHandshakeCarriesNone(): void
+    public function clientVersionIsOmittedWhenTheHandshakeCarriesAnEmptyOne(): void
     {
         $interceptor = new TracingToolCallInterceptor($this->tracer);
-        $session = new FakeSession(['client_info' => ['name' => 'claude']]);
+        $session = new FakeSession(['client_info' => ['name' => 'claude', 'version' => '']]);
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: [], session: $session),

@@ -22,7 +22,7 @@
 | Требование | Версия |
 |-------------|---------|
 | PHP | 8.3 – 8.5 |
-| `rasuvaeff/yii3-mcp` | `^1.6 \|\| ^2.0` |
+| `rasuvaeff/yii3-mcp` | `^4.0` (yii3-mcp 1.x–3.x: бридж `^1.3`) |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
 | `rasuvaeff/yii3-metrics` | `^1.0 \|\| ^2.0` |
 
@@ -68,14 +68,22 @@ configurator-регистрации — становится одним span'о�
 | `mcp.tool.argument.<name>` | по скалярному атрибуту на аргумент: маскирование (`***`), stringify (массивы — JSON), усечение до 200 байт |
 | `mcp.outcome` | `success` / `rejected` / `error` (единый `CallOutcome` из yii3-mcp) |
 | `mcp.client.id` | identity из endpoint-секрета (при нескольких секретах); отсутствует в stdio |
-| `mcp.client.name` / `mcp.client.version` | клиент из initialize handshake |
-| `mcp.session.id` | UUID MCP-сессии |
-| `mcp.session.calls_used` | число tools/call в сессии (при включённом session budget) |
-| `mcp.session.budget_remaining` | остаток бюджета (при заданном `sessionBudget`, см. ниже) |
+| `mcp.client.name` / `mcp.client.version` | клиент, как он себя назвал: `initialize` (handshake-эра) или `_meta` запроса (stateless-эра) |
+| `mcp.caller.trace_id` / `mcp.caller.span_id` | W3C trace context вызывающего (`traceparent` в `_meta`, stateless-эра), если он валиден |
+| `mcp.session.id` | UUID MCP-сессии — только handshake-эра |
+| `mcp.session.calls_used` | число tools/call в сессии (при включённом бюджете) — только handshake-эра |
+| `mcp.session.budget_remaining` | остаток бюджета (при заданном `sessionBudget`, см. ниже) — только handshake-эра |
 | status | `Error` + записанное исключение при сбое; `Unset` при успехе |
 
 Исключение tool'а записывается на span и **перебрасывается** — MCP
 error envelope, который видит агент, не меняется.
+
+На stateless-ревизии MCP 2026-07-28 SDK строит одноразовую сессию на каждый
+запрос: её id ничего не называет, а счётчик бюджета сессии там не растёт
+(yii3-mcp считает бюджет этой эры по клиенту, в PSR-16), поэтому атрибуты
+сессии не пишутся. `traceparent` вызывающего не может стать родителем span —
+`trace()` из yii3-telemetry не принимает удалённого родителя, — поэтому он
+записывается как `mcp.caller.trace_id` / `mcp.caller.span_id` для корреляции.
 
 Аргументы намеренно разложены в отдельные скалярные атрибуты: модель
 атрибутов OTel принимает только примитивы и гомогенные списки, поэтому
@@ -87,13 +95,13 @@ error envelope, который видит агент, не меняется.
 $interceptor = new TracingToolCallInterceptor(
     tracer: $tracer,                          // Rasuvaeff\Yii3Telemetry\TracerInterface
     argumentMasker: new ArgumentMasker(),     // ключи по умолчанию: password, secret, token, api_key, credit_card
-    sessionBudget: 50,                        // опционально: зеркало параметра `session.budget`
+    sessionBudget: 50,                        // опционально: зеркало параметра `tool_call_budget.calls`
 );
 ```
 
 `sessionBudget` влияет только на атрибут `mcp.session.budget_remaining` —
-сам бюджет enforce'ит `SessionBudgetInterceptor` из yii3-mcp. `int` не
-автовайрится — зеркальте параметр `session.budget` в DI-фабрике:
+сам бюджет enforce'ит `ToolCallBudgetInterceptor` из yii3-mcp. `int` не
+автовайрится — зеркальте параметр `tool_call_budget.calls` в DI-фабрике:
 
 ```php
 // config/common/di/mcp-telemetry.php
@@ -102,7 +110,7 @@ use Rasuvaeff\Yii3Telemetry\TracerInterface;
 
 return [
     TracingToolCallInterceptor::class => static function (TracerInterface $tracer) use ($params) {
-        $budget = $params['rasuvaeff/yii3-mcp']['session']['budget'] ?? 0;
+        $budget = $params['rasuvaeff/yii3-mcp']['tool_call_budget']['calls'] ?? 0;
 
         return new TracingToolCallInterceptor($tracer, sessionBudget: $budget);
     },
@@ -168,10 +176,11 @@ RBAC, audit) и сбои остальных интерцепторов попа�
 ### Чего телеметрия НЕ видит
 
 - **Отказы по бюджету невидимы.** yii3-mcp добавляет свой
-  `SessionBudgetInterceptor` самым внешним — снаружи любых интерцепторов
-  из вашего списка. Вызов, отбитый session budget, не создаёт ни span,
-  ни метрику: исчерпанный бюджет выглядит как падение трафика в ноль.
-  Следите за атрибутом `mcp.session.budget_remaining` на проходящих вызовах.
+  `ToolCallBudgetInterceptor` самым внешним — снаружи любых интерцепторов
+  из вашего списка. Вызов, отбитый бюджетом, не создаёт ни span, ни
+  метрику: исчерпанный бюджет выглядит как падение трафика в ноль. Следите
+  за атрибутом `mcp.session.budget_remaining` на проходящих вызовах
+  (handshake-эра; бюджет stateless-эры по клиенту здесь не виден).
 - **Отказы по владению сессией невидимы** (yii3-mcp `^2.0`). Ядро привязывает
   каждую сессию к создавшему её MCP-клиенту и отклоняет вызов к чужой или
   безвладельческой сессии (SDK-шейп 404 из `McpAction`,

@@ -32,8 +32,9 @@ composer require rasuvaeff/yii3-mcp-telemetry-bridge
   `outcome` label (cardinality) — errors are counted by the counter.
 - Put `TracingToolCallInterceptor` first (outermost) in the interceptor
   list so the span covers the whole chain.
-- `sessionBudget` ctor param only feeds the `mcp.session.budget_remaining`
-  span attribute; enforcement stays in yii3-mcp's `SessionBudgetInterceptor`.
+- `sessionBudget` ctor param (mirror yii3-mcp's `tool_call_budget.calls`) only
+  feeds the `mcp.session.budget_remaining` span attribute; enforcement stays in
+  yii3-mcp's `ToolCallBudgetInterceptor`. Requires yii3-mcp ^4.0.
 
 ## API
 
@@ -53,9 +54,12 @@ new TracingToolCallInterceptor(
 Span: name `mcp.tool <tool>`; attributes `mcp.tool`,
 `mcp.tool.argument.<name>` (masked + stringified + truncated, one per
 argument), `mcp.outcome` (`success`/`rejected`/`error` — yii3-mcp CallOutcome), `mcp.client.id` (when the
-transport carries one), `mcp.client.name`/`mcp.client.version` (initialize
-handshake), `mcp.session.id`, `mcp.session.calls_used`,
-`mcp.session.budget_remaining` (only with `sessionBudget`).
+transport carries one), `mcp.client.name`/`mcp.client.version` (initialize or the
+request's `_meta`), `mcp.caller.trace_id`/`mcp.caller.span_id` (valid caller
+`traceparent`, stateless era — trace() takes no remote parent),
+`mcp.session.id`, `mcp.session.calls_used`, `mcp.session.budget_remaining`
+(only with `sessionBudget`) — the session ones on the handshake era only: on
+the stateless 2026-07-28 era the session is a per-request throwaway.
 
 The SDK executes calls in Fiber. Concurrent OTel propagation requires NTS PHP,
 ext-ffi and OTEL_PHP_FIBERS_ENABLED=true (preload vendor/autoload.php where
