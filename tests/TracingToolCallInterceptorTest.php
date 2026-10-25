@@ -232,10 +232,13 @@ final class TracingToolCallInterceptorTest
     }
 
     /**
-     * MCP requires both name and version in clientInfo; yii3-mcp 4 reads a
-     * handshake entry missing one as no client info at all.
+     * MCP requires both name and version in clientInfo, but real clients
+     * omit the version — since yii3-mcp 4.1 a handshake entry missing it is
+     * still client info, with an empty version string: dropping the name
+     * would blind every consumer that reports the client. The bridge
+     * records the name and skips the empty version.
      */
-    public function incompleteHandshakeClientInfoRecordsNoClientAttributes(): void
+    public function incompleteHandshakeClientInfoRecordsTheNameWithoutVersion(): void
     {
         $interceptor = new TracingToolCallInterceptor($this->tracer);
 
@@ -244,7 +247,11 @@ final class TracingToolCallInterceptorTest
             static fn(): string => 'paid',
         );
 
-        Assert::false(array_key_exists('mcp.client.name', $this->tracer->spans[0]->attributes));
+        $attributes = $this->tracer->spans[0]->attributes;
+
+        Assert::true(array_key_exists('mcp.client.name', $attributes));
+        Assert::same($attributes['mcp.client.name'], 'claude');
+        Assert::false(array_key_exists('mcp.client.version', $attributes));
     }
 
     /**
