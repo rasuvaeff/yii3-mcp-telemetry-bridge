@@ -244,7 +244,7 @@ final class TracingToolCallInterceptorTest
 
         $interceptor->intercept(
             new ToolCallContext(toolName: 'order.status', arguments: [], session: new FakeSession(['client_info' => ['name' => 'claude']])),
-            static fn (): string => 'paid',
+            static fn(): string => 'paid',
         );
 
         $attributes = $this->tracer->spans[0]->attributes;
