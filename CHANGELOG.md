@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- Mutation testing now counts code the tests execute without naming it in `#[Covers]`
+  (`infection --with-uncovered`), with `PublicVisibility` off and signature defaults ignored
+  as in the monorepo template; overall MSI stays 100%. No `src/` or test changes.
+
 ## 1.4.0 — 2026-10-08
 
 - Requires `rasuvaeff/yii3-mcp` `^4.0` (mcp/sdk 0.8). Applications on yii3-mcp
