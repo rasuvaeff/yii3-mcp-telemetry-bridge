@@ -124,11 +124,11 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
 
         $info = $context->clientInfo();
 
-        if ($info !== null && $info->name !== '') {
+        if ($info instanceof \Mcp\Schema\Implementation && $info->name !== '') {
             $attributes['mcp.client.name'] = $info->name;
         }
 
-        if ($info !== null && $info->version !== '') {
+        if ($info instanceof \Mcp\Schema\Implementation && $info->version !== '') {
             $attributes['mcp.client.version'] = $info->version;
         }
 
@@ -141,7 +141,7 @@ final readonly class TracingToolCallInterceptor implements ToolCallInterceptorIn
 
         $session = $context->session;
 
-        if ($session === null || $context->isStateless()) {
+        if (!$session instanceof \Mcp\Server\Session\SessionInterface || $context->isStateless()) {
             return $attributes;
         }
 

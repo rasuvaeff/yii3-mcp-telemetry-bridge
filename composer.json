@@ -26,14 +26,15 @@
     },
     "require": {
         "php": "8.3 - 8.5",
-        "rasuvaeff/yii3-mcp": "^4.1",
+        "mcp/sdk": "~0.10.0",
+        "rasuvaeff/yii3-mcp": "^5.0",
         "rasuvaeff/yii3-metrics": "^1.0 || ^2.0",
         "rasuvaeff/yii3-telemetry": "^1.0"
     },
     "require-dev": {
         "ergebnis/composer-normalize": "^2.51",
         "friendsofphp/php-cs-fixer": "^3.95",
-        "infection/infection": "^0.33",
+        "infection/infection": "^0.35",
         "maglnet/composer-require-checker": "^4.17",
         "nyholm/psr7": "^1.8",
         "rasuvaeff/understudy-testo": "^1.0",
@@ -42,7 +43,7 @@
         "roave/backward-compatibility-check": "^8.0",
         "testo/bridge-infection": "^0.1.6",
         "testo/testo": "^0.10.25",
-        "vimeo/psalm": "^6.16",
+        "vimeo/psalm": "^7.0",
         "yiisoft/test-support": "^3.0"
     },
     "autoload": {

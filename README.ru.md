@@ -22,7 +22,7 @@
 | Требование | Версия |
 |-------------|---------|
 | PHP | 8.3 – 8.5 |
-| `rasuvaeff/yii3-mcp` | `^4.0` (yii3-mcp 1.x–3.x: бридж `^1.3`) |
+| `rasuvaeff/yii3-mcp` | `^5.0` (yii3-mcp 4.x: бридж `^1.4`; 1.x–3.x: `^1.3`) |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
 | `rasuvaeff/yii3-metrics` | `^1.0 \|\| ^2.0` |
 

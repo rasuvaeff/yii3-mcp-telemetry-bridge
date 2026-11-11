@@ -66,7 +66,7 @@ works, no path repos needed.
   reclassify locally — the audit bridge uses the same vocabulary. Keep the
   README "What the telemetry does NOT see" section in sync.
 - **Session attributes are handshake-era only.** On the stateless 2026-07-28
-  era (`$context->isStateless()`, yii3-mcp 4) the session is a throwaway the
+  era (`$context->isStateless()`, yii3-mcp 4+) the session is a throwaway the
   SDK builds per request: recording its id would log a random UUID, and its
   budget counter never moves. The caller's `traceparent` is recorded as
   validated `mcp.caller.*` attributes, never as the span parent —
