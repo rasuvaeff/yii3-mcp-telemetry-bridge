@@ -135,6 +135,10 @@ jobs:
         run: composer "$BUILD_SCRIPT"
 
       - name: OTel Fiber integration
+        # 8.6 runs the unit tests only (see the matrix note): opis/json-schema,
+        # which the SDK validates tool arguments with, still calls
+        # spl_object_hash(), deprecated in 8.6
+        if: ${{ !matrix.experimental }}
         run: MCP_OTEL_FIBER_TEST=1 vendor/bin/testo --suite=Integration
 
   prefer-lowest:
