@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
 use InvalidArgumentException;
-use Mcp\Exception\ToolCallException;
 use Mcp\Schema\ClientCapabilities;
 use Mcp\Schema\Implementation;
 use Mcp\Schema\Request\PingRequest;
+use Mcp\Schema\RequestMeta;
+use Mcp\Server\Exception\ToolCallException;
 use Mcp\Server\RequestContext;
-use Mcp\Server\Stateless\RequestMeta;
 use Rasuvaeff\Yii3Mcp\Interceptor\ArgumentMasker;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\Tests\Support\FakeSession;
@@ -78,6 +78,22 @@ final class TracingToolCallInterceptorTest
 
         Assert::same($attributes['mcp.tool.argument.orderId'], '42');
         Assert::same($attributes['mcp.tool.argument.password'], '***');
+    }
+
+    /**
+     * yii3-mcp 5 (SDK 0.10) hands nested JSON objects over as \stdClass: a
+     * secret one level down an object is masked before it is encoded.
+     */
+    public function secretsInsideNestedObjectsAreMasked(): void
+    {
+        $interceptor = new TracingToolCallInterceptor($this->tracer);
+
+        $interceptor->intercept(
+            new ToolCallContext(toolName: 'order.status', arguments: ['credentials' => (object) ['login' => 'a', 'password' => 'p@ss']]),
+            static fn(): string => 'paid',
+        );
+
+        Assert::same($this->tracer->spans[0]->attributes['mcp.tool.argument.credentials'], '{"login":"a","password":"***"}');
     }
 
     public function customMaskerIsHonored(): void

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
-use Mcp\Exception\ToolCallException;
+use Mcp\Server\Exception\ToolCallException;
 use Rasuvaeff\Understudy\Arg;
 use Rasuvaeff\Understudy\Understudy;
 use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
