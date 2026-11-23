@@ -34,7 +34,7 @@ composer require rasuvaeff/yii3-mcp-telemetry-bridge
   list so the span covers the whole chain.
 - `sessionBudget` ctor param (mirror yii3-mcp's `tool_call_budget.calls`) only
   feeds the `mcp.session.budget_remaining` span attribute; enforcement stays in
-  yii3-mcp's `ToolCallBudgetInterceptor`. Requires yii3-mcp ^5.0 (mcp/sdk ~0.10).
+  yii3-mcp's `ToolCallBudgetInterceptor`. Requires rasuvaeff/mcp ^0.1; conflicts with yii3-mcp below 6.0.
 
 ## API
 
@@ -42,7 +42,7 @@ composer require rasuvaeff/yii3-mcp-telemetry-bridge
 
 ```php
 use Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor;
-use Rasuvaeff\Yii3Mcp\Interceptor\ArgumentMasker;
+use Rasuvaeff\Mcp\Interceptor\ArgumentMasker;
 
 new TracingToolCallInterceptor(
     tracer: $tracer,                       // Rasuvaeff\Yii3Telemetry\TracerInterface

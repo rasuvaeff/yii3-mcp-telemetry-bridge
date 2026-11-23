@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Tests;
 
 use Mcp\Server\Exception\ToolCallException;
+use Rasuvaeff\Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Understudy\Arg;
 use Rasuvaeff\Understudy\Understudy;
-use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\MetricsToolCallInterceptor;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
 use Rasuvaeff\Yii3Metrics\MeterInterface;

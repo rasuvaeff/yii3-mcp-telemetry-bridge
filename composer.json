@@ -27,7 +27,7 @@
     "require": {
         "php": "8.3 - 8.5",
         "mcp/sdk": "~0.10.0",
-        "rasuvaeff/yii3-mcp": "^5.0",
+        "rasuvaeff/mcp": "^0.1",
         "rasuvaeff/yii3-metrics": "^1.0 || ^2.0",
         "rasuvaeff/yii3-telemetry": "^1.0"
     },
@@ -45,6 +45,9 @@
         "testo/testo": "^0.10.25",
         "vimeo/psalm": "^7.0",
         "yiisoft/test-support": "^3.0"
+    },
+    "conflict": {
+        "rasuvaeff/yii3-mcp": "<6.0"
     },
     "autoload": {
         "psr-4": {
