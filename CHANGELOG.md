@@ -5,12 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 2.0.0 — 2026-11-24
 
 - **Changed (breaking):** built on `rasuvaeff/mcp` `^0.1` instead of
   `rasuvaeff/yii3-mcp` `^5.0`; needs no Yii3 package of the MCP server any more.
   Conflicts with `rasuvaeff/yii3-mcp` below 6.0, whose interceptor interfaces are
-  different types. Behaviour is unchanged.
+  different types. Behaviour is unchanged (#20).
 
 ## 1.5.0 — 2026-11-11
 
