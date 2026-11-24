@@ -22,7 +22,8 @@ Observability for MCP servers: a trace span and RED-style metrics for every
 | Requirement | Version |
 |-------------|---------|
 | PHP | 8.3 – 8.5 |
-| `rasuvaeff/yii3-mcp` | `^5.0` (yii3-mcp 4.x: bridge `^1.4`; 1.x–3.x: `^1.3`) |
+| `rasuvaeff/mcp` | `^0.1` |
+| `rasuvaeff/yii3-mcp` | `^6.0` in a Yii3 application (for 5.x use bridge `^1.5`) |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
 | `rasuvaeff/yii3-metrics` | `^1.0 \|\| ^2.0` |
 

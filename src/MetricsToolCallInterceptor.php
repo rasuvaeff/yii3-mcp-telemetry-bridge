@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3McpTelemetryBridge;
 
-use Rasuvaeff\Yii3Mcp\Interceptor\CallOutcome;
-use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
-use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallInterceptorInterface;
+use Rasuvaeff\Mcp\Interceptor\CallOutcome;
+use Rasuvaeff\Mcp\Interceptor\ToolCallContext;
+use Rasuvaeff\Mcp\Interceptor\ToolCallInterceptorInterface;
 use Rasuvaeff\Yii3Metrics\CounterInterface;
 use Rasuvaeff\Yii3Metrics\HistogramInterface;
 use Rasuvaeff\Yii3Metrics\LabelSet;

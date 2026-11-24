@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3McpTelemetryBridge\Benchmarks;
 
-use Rasuvaeff\Yii3Mcp\Interceptor\ToolCallContext;
+use Rasuvaeff\Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Yii3McpTelemetryBridge\MetricsToolCallInterceptor;
 use Rasuvaeff\Yii3McpTelemetryBridge\TracingToolCallInterceptor;
 use Rasuvaeff\Yii3Metrics\MetricRegistry;
